@@ -108,9 +108,9 @@ def train_test_with_fixed_params(train_data, test_data, phylo_tree, params):
 
 
 if __name__ == "__main__":
-    training_data_file = "../data/270.pkl"
-    testing_data_file = "../data/269.pkl"
-    phylo_tree_file = "../data/phylogenetic_tree.json"
+    training_data_file = "/scratch/adrouin/data/phyloreg/270.pkl"
+    testing_data_file = "/scratch/adrouin/data/phyloreg/269.pkl"
+    phylo_tree_file = "/scratch/adrouin/data/phyloreg/phylogenetic_tree.json"
     n_cv_folds = 3
     random_state = np.random.RandomState(42)
     n_parameter_combinations = 100
@@ -173,4 +173,6 @@ if __name__ == "__main__":
     test_predictions, test_auc, model = \
         train_test_with_fixed_params(train_data, test_data, phylo_tree, best_params)
     print "Test AUC is", test_auc
-    open(os.path.join("predictions", "phylo.krr.{0!s}".format(os.path.basename(testing_data_file).replace(".pkl", ""))), "w").write("\n".join(str(x) for x in test_predictions))
+    output_path = os.path.join("predictions", "phylo.krr.{0!s}".format(os.path.basename(testing_data_file).replace(".pkl", "")))
+    open(output_path, "w").write("\n".join(str(x) for x in test_predictions))
+    json.dump(best_params, open(output_path + ".parameters", "w"))
