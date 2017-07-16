@@ -1,4 +1,4 @@
-# Subprojects
+# Sub-projects
 
 We want to show that using phylogenetic regularization increases the prediction accuracy of predictors (classifiers and possibly regressors). To achieve this, we will compare the following type of algorithms:
 
