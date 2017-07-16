@@ -17,10 +17,14 @@ from time import time
 
 
 def cross_validation(phylo_tree, train_data, folds, params):
+    # Create a dummy ortholog dictionnary
+    orthologs = defaultdict(lambda: {"X": [], "species": []})
 
     # Create the species adjacency matrix
     species, adjacency = \
-        ExponentialAdjacencyMatrixBuilder(sigma=params["sigma"])(phylo_tree)
+        ExponentialAdjacencyMatrixBuilder(sigma=0.000000001)(phylo_tree)
+    # XXX: The adjacency matrix and the orthologs are not used by the learning.
+    #      They are just passed to fit in order to reuse the same implementation.
 
     example_ids = np.array(train_data["labels"].keys(), dtype=np.uint)
     fold_aucs = []
@@ -33,23 +37,13 @@ def cross_validation(phylo_tree, train_data, folds, params):
         X_train = np.vstack((train_data["labelled_examples"][i] for i in train_ids))
         y_train = np.array([train_data["labels"][i] for i in train_ids], dtype=np.uint8)
 
-        # Build the orthologs dictionnary
-        orthologs = defaultdict(lambda: {"X": [], "species": []})
-        for i, id in enumerate(train_ids):
-            # The ortholog dictionnary key must be the index of the example in the
-            # feature matrix. The orthologs need to be in the same order as the
-            # feature vectors and labels.
-            if train_data["ortho_info"].has_key(id):
-                orthologs[i] = train_data["ortho_info"][id]
-
         # Prepare the testing data
         X_test = np.vstack((train_data["labelled_examples"][i] for i in test_ids))
         y_test = np.array([train_data["labels"][i] for i in test_ids], dtype=np.uint8)
 
         # Fit the classifier
         clf = RidgeRegression(alpha=params["alpha"],
-                              beta=params["beta"],
-                              normalize_laplacian=params["normalize_laplacian"],
+                              beta=0.,
                               fit_intercept=True)
         clf.fit(X=X_train,
                 X_species=["hg38"] * X_train.shape[0],
@@ -66,24 +60,19 @@ def cross_validation(phylo_tree, train_data, folds, params):
 
 
 def train_test_with_fixed_params(train_data, test_data, phylo_tree, params):
+    # Create a dummy ortholog dictionnary
+    orthologs = defaultdict(lambda: {"X": [], "species": []})
 
     # Create the species adjacency matrix
     species, adjacency = \
-        ExponentialAdjacencyMatrixBuilder(sigma=params["sigma"])(phylo_tree)
+        ExponentialAdjacencyMatrixBuilder(sigma=0.000000001)(phylo_tree)
+    # XXX: The adjacency matrix and the orthologs are not used by the learning.
+    #      They are just passed to fit in order to reuse the same implementation.
 
     # Prepare the training data
     train_ids = train_data["labels"].keys()  # Use the entire training set
     X_train = np.vstack((train_data["labelled_examples"][i] for i in train_ids))
     y_train = np.array([train_data["labels"][i] for i in train_ids], dtype=np.uint8)
-
-    # Build the orthologs dictionnary
-    orthologs = defaultdict(lambda: {"X": [], "species": []})
-    for i, id in enumerate(train_ids):
-        # The ortholog dictionnary key must be the index of the example in the
-        # feature matrix. The orthologs need to be in the same order as the
-        # feature vectors and labels.
-        if train_data["ortho_info"].has_key(id):
-            orthologs[i] = train_data["ortho_info"][id]
 
     # Prepare the testing data
     test_ids = test_data["labels"].keys()  # Use the entire testing set
@@ -92,8 +81,7 @@ def train_test_with_fixed_params(train_data, test_data, phylo_tree, params):
 
     # Fit the classifier
     clf = RidgeRegression(alpha=params["alpha"],
-                          beta=params["beta"],
-                          normalize_laplacian=params["normalize_laplacian"],
+                          beta=0.,
                           fit_intercept=True)
     clf.fit(X=X_train,
             X_species=["hg38"] * X_train.shape[0],
@@ -116,10 +104,7 @@ if __name__ == "__main__":
     n_parameter_combinations = 100
     n_random_combinations = 20
 
-    parameter_space = {'sigma': {'type': 'float', 'min': 1e-5, 'max': 1e0},
-                       'alpha': {'type': 'float', 'min': 1e-8, 'max': 1e8},
-                       'beta': {'type': 'float', 'min': 1e-8, 'max': 1e8},
-                       'normalize_laplacian': {'type': 'enum', 'options': [True, False]}}
+    parameter_space = {'alpha': {'type': 'float', 'min': 1e-8, 'max': 1e8}}
 
     # Load the training data
     train_data = c.load(open(training_data_file, "r"))
@@ -154,11 +139,8 @@ if __name__ == "__main__":
             best_params = params
             print "Found a better model!\n\n"
         elif np.isclose(cv_score, best_model_cv_score):
-            # Tiebreaker: pick the model with the least amount of regularization,
-            # starting with manifold regularization. This way, we will only see
-            # a large beta if it is really helping.
-            if params["beta"] < best_params["beta"] or \
-               (np.isclose(params["beta"], best_params["beta"]) and params["alpha"] < best_params["alpha"]):
+            # Tiebreaker: pick the model with the least amount of regularization
+            if params["alpha"] < best_params["alpha"]:
                 best_model_cv_score = cv_score
                 best_params = params
                 print "Found a better model!\n\n"
@@ -173,4 +155,4 @@ if __name__ == "__main__":
     test_predictions, test_auc, model = \
         train_test_with_fixed_params(train_data, test_data, phylo_tree, best_params)
     print "Test AUC is", test_auc
-    open(os.path.join("predictions", "phylo.krr.{0!s}".format(os.path.basename(testing_data_file).replace(".pkl", ""))), "w").write("\n".join(str(x) for x in test_predictions))
+    open(os.path.join("predictions", "krr.{0!s}".format(os.path.basename(testing_data_file).replace(".pkl", ""))), "w").write("\n".join(str(x) for x in test_predictions))
