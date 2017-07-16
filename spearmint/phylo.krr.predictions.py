@@ -108,9 +108,9 @@ def train_test_with_fixed_params(train_data, test_data, phylo_tree, params):
 
 
 if __name__ == "__main__":
-    training_data_file = "/scratch/adrouin/data/phyloreg/270.pkl"
-    testing_data_file = "/scratch/adrouin/data/phyloreg/269.pkl"
-    phylo_tree_file = "/scratch/adrouin/data/phyloreg/phylogenetic_tree.json"
+    training_data_file = "../data/270.pkl"
+    testing_data_file = "../data/269.pkl"
+    phylo_tree_file = "../data/phylogenetic_tree.json"
     n_cv_folds = 3
     random_state = np.random.RandomState(42)
     n_parameter_combinations = 100
