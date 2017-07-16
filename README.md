@@ -1,5 +1,4 @@
-# phyloreg-paper
-
+# Phylogenetic regularization
 
 ## Status updates
 
