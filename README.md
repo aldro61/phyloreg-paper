@@ -2,6 +2,12 @@
 
 ## Status updates
 
+### July 17 2017
+
+* Started working on autograd implementations of the algorithms as a sanity check for our other implementations
+* If this yields implementations that are fast enough, we will be able to do prototyping very fast using autograd + spearmint
+* Still have some work to do before comitting and running experiments
+
 ### July 16 2017
 
 * Results for training on #270 and testing on #269:
