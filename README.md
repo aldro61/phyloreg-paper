@@ -2,6 +2,15 @@
 
 ## Status updates
 
+### July 18 2017
+
+* Created a framework to implement learners that use phylogenetic regularization with autograd.
+* Implemented all our learning algorithms in this framework
+* Experimented with some tricks to help the optimization.
+  * Gradient clipping seems to help avoiding an explosion of the gradient/objective due to the manifold term
+  * I saw that when using gradient clipping, we were able to fit the data very well, even with larger beta values, without catching nan or inf values
+* Will now launch Spearmint experiments on the 269/270 dataset
+
 ### July 17 2017
 
 * Started working on autograd implementations of the algorithms as a sanity check for our other implementations
