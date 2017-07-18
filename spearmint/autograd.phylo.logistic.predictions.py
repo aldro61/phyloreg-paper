@@ -1,5 +1,5 @@
 """
-Predictions for a kernel ridge regression that uses phylogenetic regularization.
+Predictions for a logistic regression that uses phylogenetic regularization.
 Spearmint is used to select the model hyperparameters.
 
 """
@@ -8,7 +8,7 @@ import json
 import numpy as np
 import os
 
-from phyloreg.autograd_classifiers import AutogradRidgeRegression
+from phyloreg.autograd_classifiers import AutogradLogisticRegression
 from collections import defaultdict
 from phyloreg.classifiers import RidgeRegression
 from phyloreg.species import ExponentialAdjacencyMatrixBuilder
@@ -50,7 +50,7 @@ def cross_validation(phylo_tree, train_data, folds, params):
         y_test = np.array([train_data["labels"][i] for i in test_ids], dtype=np.uint8)
 
         # Fit the classifier
-        clf = AutogradRidgeRegression(alpha=params["alpha"],
+        clf = AutogradLogisticRegression(alpha=params["alpha"],
                               beta=params["beta"],
                               fit_intercept=True,
                               opti_lr=params["opti_lr"],
@@ -99,7 +99,7 @@ def train_test_with_fixed_params(train_data, test_data, phylo_tree, params):
     y_test = np.array([test_data["labels"][i] for i in test_ids], dtype=np.uint8)
 
     # Fit the classifier
-    clf = AutogradRidgeRegression(alpha=params["alpha"],
+    clf = AutogradLogisticRegression(alpha=params["alpha"],
                           beta=params["beta"],
                           fit_intercept=True,
                           opti_lr=params["opti_lr"],
@@ -191,6 +191,6 @@ if __name__ == "__main__":
     test_predictions, test_auc, model = \
         train_test_with_fixed_params(train_data, test_data, phylo_tree, best_params)
     print "Test AUC is", test_auc
-    output_path = os.path.join("predictions", "autograd.phylo.krr.{0!s}".format(os.path.basename(testing_data_file).replace(".pkl", "")))
+    output_path = os.path.join("predictions", "autograd.phylo.logistic.{0!s}".format(os.path.basename(testing_data_file).replace(".pkl", "")))
     open(output_path, "w").write("\n".join(str(x) for x in test_predictions))
     json.dump(best_params, open(output_path + ".parameters", "w"))
