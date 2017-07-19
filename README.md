@@ -2,6 +2,11 @@
 
 ## Status updates
 
+### July 19 2017
+
+* Found a problem with our manifold terms. We were using 0-valued vectors for missing orthologs, but this doesn't make sense since it leads to a cost! Working on a fix.
+* For the autograd classifiers, it will be **very important that the data is shuffled** prior to training. I did not implement this in the learner to avoid creating a copy of the data.
+
 ### July 18 2017
 
 * Created a framework to implement learners that use phylogenetic regularization with autograd.
