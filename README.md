@@ -6,6 +6,7 @@
 
 * Found a problem with our manifold terms. We were using 0-valued vectors for missing orthologs, but this doesn't make sense since it leads to a cost! Working on a fix.
 * For the autograd classifiers, it will be **very important that the data is shuffled** prior to training. I did not implement this in the learner to avoid creating a copy of the data.
+* The ortholog loss function bug has been fixed. Will launch a spearmint experiment on the CHUL clusters later today.
 
 ### July 18 2017
 

@@ -54,11 +54,11 @@ def cross_validation(phylo_tree, train_data, folds, params):
                               beta=params["beta"],
                               fit_intercept=True,
                               opti_lr=params["opti_lr"],
-                              opti_tol=1e-4,
-                              opti_max_epochs=150,
-                              opti_patience=10,
-                              opti_batch_size=10,
-                              opti_clip_norm=10.)
+                              opti_tol=1e-5,
+                              opti_max_epochs=300,
+                              opti_patience=5,
+                              opti_batch_size=20,
+                              opti_clip_norm=params["opti_clip_norm"])
         clf.fit(X=X_train,
                 X_species=["hg38"] * X_train.shape[0],
                 y=y_train,
@@ -74,13 +74,15 @@ def cross_validation(phylo_tree, train_data, folds, params):
 
 
 def train_test_with_fixed_params(train_data, test_data, phylo_tree, params):
+    sgd_shuffler = np.random.RandomState(42)
 
     # Create the species adjacency matrix
     species, adjacency = \
         ExponentialAdjacencyMatrixBuilder(sigma=params["sigma"])(phylo_tree)
 
     # Prepare the training data
-    train_ids = train_data["labels"].keys()  # Use the entire training set
+    train_ids = np.array(train_data["labels"].keys())  # Use the entire training set
+    sgd_shuffler.shuffle(train_ids)
     X_train = np.vstack((train_data["labelled_examples"][i] for i in train_ids))
     y_train = np.array([train_data["labels"][i] for i in train_ids], dtype=np.uint8)
 
@@ -103,11 +105,11 @@ def train_test_with_fixed_params(train_data, test_data, phylo_tree, params):
                           beta=params["beta"],
                           fit_intercept=True,
                           opti_lr=params["opti_lr"],
-                          opti_tol=1e-4,
-                          opti_max_epochs=150,
-                          opti_patience=10,
-                          opti_batch_size=10,
-                          opti_clip_norm=10.)
+                          opti_tol=1e-5,
+                          opti_max_epochs=300,
+                          opti_patience=5,
+                          opti_batch_size=20,
+                          opti_clip_norm=params["opti_clip_norm"])
     clf.fit(X=X_train,
             X_species=["hg38"] * X_train.shape[0],
             y=y_train,
@@ -131,13 +133,14 @@ if __name__ == "__main__":
     phylo_tree_file = "../data/phylogenetic_tree.json"
     n_cv_folds = 3
     random_state = np.random.RandomState(42)
-    n_parameter_combinations = 100
-    n_random_combinations = 5
+    n_parameter_combinations = 200
+    n_random_combinations = 10
 
     parameter_space = {'sigma': {'type': 'float', 'min': 1e-5, 'max': 1e0},
                        'alpha': {'type': 'float', 'min': 1e-8, 'max': 1e4},
                        'beta': {'type': 'float', 'min': 1e-8, 'max': 1e4},
-                       'opti_lr': {'type': 'float', 'min': 1e-5, 'max': 1e-2}}
+                       'opti_lr': {'type': 'float', 'min': 1e-5, 'max': 1e-1},
+                       'opti_clip_norm': {'type': 'float', 'min': 1e0, 'max': 1e3}}
 
     # Load the training data
     train_data = c.load(open(training_data_file, "r"))
