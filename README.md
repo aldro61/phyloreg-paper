@@ -4,13 +4,13 @@
 
 ### July 22 2017
 
-* New results for the autograd implementations show that phylogenetic regularization does help achieve better testing set AUCs:
+* New results for the autograd implementations show that phylogenetic regularization does help achieve better testing set AUCs (train on file #270, test on file #269):
   * RR: (running)
   * Logistic: 0.759
   * PhyloRR: 0.802
   * PhyloLogistic: 0.807
 * Protocol: Spearmint was used to choose the hyperparameters within the following ranges:
-{'sigma': {'type': 'float', 'min': 1e-5, 'max': 1e0}, 'alpha': {'type': 'float', 'min': 1e-8, 'max': 1e4}, 'beta': {'type': 'float', 'min': 1e-8, 'max': 1e4}, 'opti\_lr': {'type': 'float', 'min': 1e-5, 'max': 1e-1}, 'opti\_clip\_norm': {'type': 'float', 'min': 1e0, 'max': 1e3}}. The hyperparameter search was limited to 400 combinations for each algorithm.
+{'sigma': {'type': 'float', 'min': 1e-5, 'max': 1e0}, 'alpha': {'type': 'float', 'min': 1e-8, 'max': 1e4}, 'beta': {'type': 'float', 'min': 1e-8, 'max': 1e4}, 'opti\_lr': {'type': 'float', 'min': 1e-5, 'max': 1e-1}, 'opti\_clip\_norm': {'type': 'float', 'min': 1e0, 'max': 1e3}}. The hyperparameter search was limited to 310 combinations for each algorithm.
 * Note: I believe that the hyperparameter ranges tried are way too large and once we have run experiments on many datasets we will have a better idea of the range of values of interest. This will speed up HP search.
                        
 
