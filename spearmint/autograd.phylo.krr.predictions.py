@@ -127,14 +127,15 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG,
                             format="%(asctime)s.%(msecs)d %(levelname)s %(module)s - %(funcName)s: %(message)s")
 
-
+    bootstrap_file = "predictions/autograd.phylo.krr.269.spearmint"
     training_data_file = "../data/270.pkl"
     testing_data_file = "../data/269.pkl"
     phylo_tree_file = "../data/phylogenetic_tree.json"
     n_cv_folds = 3
     random_state = np.random.RandomState(42)
-    n_parameter_combinations = 200
+    n_parameter_combinations = 54
     n_random_combinations = 10
+    output_path = os.path.join("predictions", "autograd.phylo.krr.{0!s}".format(os.path.basename(testing_data_file).replace(".pkl", "")))
 
     parameter_space = {'sigma': {'type': 'float', 'min': 1e-5, 'max': 1e0},
                        'alpha': {'type': 'float', 'min': 1e-8, 'max': 1e4},
@@ -150,11 +151,23 @@ if __name__ == "__main__":
     folds = np.arange(len(train_data["labels"])) % n_cv_folds
     random_state.shuffle(folds)
 
-    # Hyperparameter selection
+    # Create a Spearmint object
     ss = SimpleSpearmint(parameter_space, minimize=False)
+
+    # Bootstrap with previous spearmint run
+    if bootstrap_file is not None:
+        print "ATTENTION: Bootstrapping with previous spearmint run! Number of random suggestions will be reset to 0."
+        n_random_combinations = 0
+        bootstrap = json.load(open(bootstrap_file, "r"))
+        for run in bootstrap:
+            ss.update(run["params"], run["cv_score"] * -1)  # Scores are - because we maximize...
+        print "Bootstrapped with", len(bootstrap), "parameter combinations"
+
+    # Hyperparameter selection
     np.random.seed(42)  # ss doesnt take a random state so we set the global numpy seed
-    best_model_cv_score = -np.infty
-    best_params = None
+    best_model_cv_score = -np.infty if bootstrap_file is None else ss.get_best_parameters()[1]
+    best_params = None if bootstrap_file is None else ss.get_best_parameters()[0]
+    print "Best score is", best_model_cv_score
     for i in xrange(n_parameter_combinations):
         # Get a suggestion from Spearmint
         print "Hyperparameter combination #", i + 1, "/", n_parameter_combinations
@@ -187,6 +200,9 @@ if __name__ == "__main__":
         # Feed the result back to Spearmint
         ss.update(params, cv_score)
 
+        # Checkpoint: save the hyperparameter combinations and their objective values so we can relaunch if needed
+        json.dump([dict(params=p, cv_score=v) for p, v in zip(ss.parameter_values, ss.objective_values)], open(output_path + ".spearmint", "w"))
+
     # Predictions on testing set
     print "\n\nRe-training with best parameters and predicting on testing data"
     print "The best parameters are:", best_params
@@ -194,6 +210,7 @@ if __name__ == "__main__":
     test_predictions, test_auc, model = \
         train_test_with_fixed_params(train_data, test_data, phylo_tree, best_params)
     print "Test AUC is", test_auc
-    output_path = os.path.join("predictions", "autograd.phylo.krr.{0!s}".format(os.path.basename(testing_data_file).replace(".pkl", "")))
+
+    # Save test predictions and best parameters
     open(output_path, "w").write("\n".join(str(x) for x in test_predictions))
     json.dump(best_params, open(output_path + ".parameters", "w"))

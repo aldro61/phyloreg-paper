@@ -8,9 +8,8 @@ import json
 import numpy as np
 import os
 
-from phyloreg.autograd_classifiers import AutogradLogisticRegression
 from collections import defaultdict
-from phyloreg.classifiers import RidgeRegression
+from phyloreg.classifiers import LogisticRegression
 from phyloreg.species import ExponentialAdjacencyMatrixBuilder
 from simple_spearmint import SimpleSpearmint
 from sklearn.metrics import roc_auc_score
@@ -18,7 +17,6 @@ from time import time
 
 
 def cross_validation(phylo_tree, train_data, folds, params):
-    sgd_shuffler = np.random.RandomState(42)
 
     # Create the species adjacency matrix
     species, adjacency = \
@@ -28,8 +26,7 @@ def cross_validation(phylo_tree, train_data, folds, params):
     fold_aucs = []
     for fold in np.unique(folds):
         print "... Fold", fold
-        train_ids = np.array(example_ids[folds != fold])
-        sgd_shuffler.shuffle(train_ids)
+        train_ids = example_ids[folds != fold]
         test_ids = example_ids[folds == fold]
 
         # Prepare the training data
@@ -50,15 +47,16 @@ def cross_validation(phylo_tree, train_data, folds, params):
         y_test = np.array([train_data["labels"][i] for i in test_ids], dtype=np.uint8)
 
         # Fit the classifier
-        clf = AutogradLogisticRegression(alpha=params["alpha"],
-                              beta=params["beta"],
-                              fit_intercept=True,
-                              opti_lr=params["opti_lr"],
-                              opti_tol=1e-5,
-                              opti_max_epochs=300,
-                              opti_patience=5,
-                              opti_batch_size=20,
-                              opti_clip_norm=params["opti_clip_norm"])
+        clf = LogisticRegression(alpha=params["alpha"],
+                                 beta=params["beta"],
+                                 normalize_laplacian=params["normalize_laplacian"],
+                                 fit_intercept=True,
+                                 opti_max_iter=1e6,
+                                 opti_lookahead_steps=X_train.shape[0],  # 1 epoch
+                                 opti_tol=1e-4,
+                                 opti_learning_rate=params["lr"],
+                                 opti_learning_rate_decrease=params["lr_decrease"],
+                                 stop_on_nan_inf=True)
         clf.fit(X=X_train,
                 X_species=["hg38"] * X_train.shape[0],
                 y=y_train,
@@ -74,15 +72,13 @@ def cross_validation(phylo_tree, train_data, folds, params):
 
 
 def train_test_with_fixed_params(train_data, test_data, phylo_tree, params):
-    sgd_shuffler = np.random.RandomState(42)
 
     # Create the species adjacency matrix
     species, adjacency = \
         ExponentialAdjacencyMatrixBuilder(sigma=params["sigma"])(phylo_tree)
 
     # Prepare the training data
-    train_ids = np.array(train_data["labels"].keys())  # Use the entire training set
-    sgd_shuffler.shuffle(train_ids)
+    train_ids = train_data["labels"].keys()  # Use the entire training set
     X_train = np.vstack((train_data["labelled_examples"][i] for i in train_ids))
     y_train = np.array([train_data["labels"][i] for i in train_ids], dtype=np.uint8)
 
@@ -101,15 +97,16 @@ def train_test_with_fixed_params(train_data, test_data, phylo_tree, params):
     y_test = np.array([test_data["labels"][i] for i in test_ids], dtype=np.uint8)
 
     # Fit the classifier
-    clf = AutogradLogisticRegression(alpha=params["alpha"],
-                          beta=params["beta"],
-                          fit_intercept=True,
-                          opti_lr=params["opti_lr"],
-                          opti_tol=1e-5,
-                          opti_max_epochs=300,
-                          opti_patience=5,
-                          opti_batch_size=20,
-                          opti_clip_norm=params["opti_clip_norm"])
+    clf = LogisticRegression(alpha=params["alpha"],
+                             beta=params["beta"],
+                             normalize_laplacian=params["normalize_laplacian"],
+                             fit_intercept=True,
+                             opti_max_iter=1e6,
+                             opti_lookahead_steps=X_train.shape[0],  # 1 epoch
+                             opti_tol=1e-4,
+                             opti_learning_rate=params["lr"],
+                             opti_learning_rate_decrease=params["lr_decrease"],
+                             stop_on_nan_inf=True)
     clf.fit(X=X_train,
             X_species=["hg38"] * X_train.shape[0],
             y=y_train,
@@ -125,23 +122,22 @@ def train_test_with_fixed_params(train_data, test_data, phylo_tree, params):
 if __name__ == "__main__":
     import logging
     logging.basicConfig(level=logging.DEBUG,
-                            format="%(asctime)s.%(msecs)d %(levelname)s %(module)s - %(funcName)s: %(message)s")
+                                format="%(asctime)s.%(msecs)d %(levelname)s %(module)s - %(funcName)s: %(message)s")
 
-    bootstrap_file = "predictions/autograd.phylo.logistic.269.spearmint"
     training_data_file = "../data/270.pkl"
     testing_data_file = "../data/269.pkl"
     phylo_tree_file = "../data/phylogenetic_tree.json"
     n_cv_folds = 3
     random_state = np.random.RandomState(42)
-    n_parameter_combinations = 2
-    n_random_combinations = 10
-    output_path = os.path.join("predictions", "autograd.phylo.logistic.{0!s}".format(os.path.basename(testing_data_file).replace(".pkl", "")))
+    n_parameter_combinations = 300
+    n_random_combinations = 20
 
     parameter_space = {'sigma': {'type': 'float', 'min': 1e-5, 'max': 1e0},
-                       'alpha': {'type': 'float', 'min': 1e-8, 'max': 1e4},
-                       'beta': {'type': 'float', 'min': 1e-8, 'max': 1e4},
-                       'opti_lr': {'type': 'float', 'min': 1e-5, 'max': 1e-1},
-                       'opti_clip_norm': {'type': 'float', 'min': 1e0, 'max': 1e3}}
+                       'alpha': {'type': 'float', 'min': 1e-8, 'max': 1e8},
+                       'beta': {'type': 'float', 'min': 1e-8, 'max': 1e8},
+                       'normalize_laplacian': {'type': 'enum', 'options': [True, False]},
+                       'lr': {'type': 'float', 'min': 1e-6, 'max': 1e-1},
+                       'lr_decrease': {'type': 'float', 'min': 1e-6, 'max': 1e-1}}
 
     # Load the training data
     train_data = c.load(open(training_data_file, "r"))
@@ -151,23 +147,11 @@ if __name__ == "__main__":
     folds = np.arange(len(train_data["labels"])) % n_cv_folds
     random_state.shuffle(folds)
 
-    # Create a Spearmint object
-    ss = SimpleSpearmint(parameter_space, minimize=False)
-
-    # Bootstrap with previous spearmint run
-    if bootstrap_file is not None:
-        print "ATTENTION: Bootstrapping with previous spearmint run! Number of random suggestions will be reset to 0."
-        n_random_combinations = 0
-        bootstrap = json.load(open(bootstrap_file, "r"))
-        for run in bootstrap:
-            ss.update(run["params"], run["cv_score"] * -1)  # Scores are - because we maximize...
-        print "Bootstrapped with", len(bootstrap), "parameter combinations"
-
     # Hyperparameter selection
+    ss = SimpleSpearmint(parameter_space, minimize=False)
     np.random.seed(42)  # ss doesnt take a random state so we set the global numpy seed
-    best_model_cv_score = -np.infty if bootstrap_file is None else ss.get_best_parameters()[1]
-    best_params = None if bootstrap_file is None else ss.get_best_parameters()[0]
-    print "Best score is", best_model_cv_score
+    best_model_cv_score = -np.infty
+    best_params = None
     for i in xrange(n_parameter_combinations):
         # Get a suggestion from Spearmint
         print "Hyperparameter combination #", i + 1, "/", n_parameter_combinations
@@ -200,9 +184,6 @@ if __name__ == "__main__":
         # Feed the result back to Spearmint
         ss.update(params, cv_score)
 
-        # Checkpoint: save the hyperparameter combinations and their objective values so we can relaunch if needed
-        json.dump([dict(params=p, cv_score=v) for p, v in zip(ss.parameter_values, ss.objective_values)], open(output_path + ".spearmint", "w"))
-
     # Predictions on testing set
     print "\n\nRe-training with best parameters and predicting on testing data"
     print "The best parameters are:", best_params
@@ -210,7 +191,6 @@ if __name__ == "__main__":
     test_predictions, test_auc, model = \
         train_test_with_fixed_params(train_data, test_data, phylo_tree, best_params)
     print "Test AUC is", test_auc
-
-    # Save test predictions and best parameters
+    output_path = os.path.join("predictions", "phylo.logistic.{0!s}".format(os.path.basename(testing_data_file).replace(".pkl", "")))
     open(output_path, "w").write("\n".join(str(x) for x in test_predictions))
     json.dump(best_params, open(output_path + ".parameters", "w"))
