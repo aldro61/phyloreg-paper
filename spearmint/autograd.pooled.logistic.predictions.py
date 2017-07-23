@@ -1,5 +1,8 @@
 """
-Predictions for a logistic regression that does not use phylogenetic regularization.
+Predictions for a logistic regression that does not use phylogenetic regularization,
+but uses the orthologs as regular learning examples with the label of the corresponding
+labelled sequence.
+
 Spearmint is used to select the model hyperparameters.
 
 """
@@ -36,6 +39,18 @@ def cross_validation(phylo_tree, train_data, folds, params):
         # Prepare the training data
         X_train = np.vstack((train_data["labelled_examples"][i] for i in train_ids))
         y_train = np.array([train_data["labels"][i] for i in train_ids], dtype=np.uint8)
+
+        # Add the orthologous examples
+        new_x_train = []
+        new_y_train = []
+        for i, id in enumerate(train_ids):
+            if train_data["ortho_info"].has_key(id):
+                ortho_x = train_data["ortho_info"][id]["X"]
+                new_x_train.append(ortho_x)
+                new_y_train.append(np.ones(ortho_x.shape[0]) * y_train[i])  # Use the current example's label
+        X_train = np.vstack([X_train] + new_x_train)
+        y_train = np.hstack([y_train] + new_y_train)
+        assert y_train.shape[0] == X_train.shape[0]
 
         # Build the orthologs dictionnary (empty because we won't use them)
         orthologs = defaultdict(lambda: {"X": [], "species": []})
@@ -117,7 +132,7 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG,
                             format="%(asctime)s.%(msecs)d %(levelname)s %(module)s - %(funcName)s: %(message)s")
 
-    bootstrap_file = "predictions/autograd.vanilla.logistic.269.spearmint"
+    bootstrap_file = None  #"predictions/autograd.pooled.logistic.269.spearmint"
     training_data_file = "../data/270.pkl"
     testing_data_file = "../data/269.pkl"
     phylo_tree_file = "../data/phylogenetic_tree.json"
@@ -125,7 +140,7 @@ if __name__ == "__main__":
     random_state = np.random.RandomState(42)
     n_parameter_combinations = 148
     n_random_combinations = 10
-    output_path = os.path.join("predictions", "autograd.vanilla.logistic.{0!s}".format(os.path.basename(testing_data_file).replace(".pkl", "")))
+    output_path = os.path.join("predictions", "autograd.pooled.logistic.{0!s}".format(os.path.basename(testing_data_file).replace(".pkl", "")))
 
     parameter_space = {'alpha': {'type': 'float', 'min': 1e-8, 'max': 1e4},
                        'opti_lr': {'type': 'float', 'min': 1e-5, 'max': 1e-1},

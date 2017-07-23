@@ -22,7 +22,7 @@ def cross_validation(phylo_tree, train_data, folds, params):
 
     # Create the species adjacency matrix (and disable it)
     species, adjacency = \
-        ExponentialAdjacencyMatrixBuilder(sigma=1-100)(phylo_tree)
+        ExponentialAdjacencyMatrixBuilder(sigma=1e-100)(phylo_tree)
     adjacency = np.eye(adjacency.shape[0])  # Only self connections
 
     example_ids = np.array(train_data["labels"].keys(), dtype=np.uint)
