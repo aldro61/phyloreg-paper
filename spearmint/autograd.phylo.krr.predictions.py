@@ -10,7 +10,6 @@ import os
 
 from phyloreg.autograd_classifiers import AutogradRidgeRegression
 from collections import defaultdict
-from phyloreg.classifiers import RidgeRegression
 from phyloreg.species import ExponentialAdjacencyMatrixBuilder
 from simple_spearmint import SimpleSpearmint
 from sklearn.metrics import roc_auc_score

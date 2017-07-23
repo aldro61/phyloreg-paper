@@ -1,5 +1,5 @@
 """
-Predictions for a logistic regression that does not use phylogenetic regularization,
+Predictions for a ridge regression that does not use phylogenetic regularization,
 but uses the orthologs as regular learning examples with the label of the corresponding
 labelled sequence.
 
@@ -11,7 +11,7 @@ import json
 import numpy as np
 import os
 
-from phyloreg.autograd_classifiers import AutogradLogisticRegression
+from phyloreg.autograd_classifiers import AutogradRidgeRegression
 from collections import defaultdict
 from phyloreg.species import ExponentialAdjacencyMatrixBuilder
 from simple_spearmint import SimpleSpearmint
@@ -59,7 +59,7 @@ def cross_validation(phylo_tree, train_data, folds, params):
         y_test = np.array([train_data["labels"][i] for i in test_ids], dtype=np.uint8)
 
         # Fit the classifier
-        clf = AutogradLogisticRegression(alpha=params["alpha"],
+        clf = AutogradRidgeRegression(alpha=params["alpha"],
                               beta=0.,
                               fit_intercept=True,
                               opti_lr=params["opti_lr"],
@@ -117,7 +117,7 @@ def train_test_with_fixed_params(train_data, test_data, phylo_tree, params):
     y_test = np.array([test_data["labels"][i] for i in test_ids], dtype=np.uint8)
 
     # Fit the classifier
-    clf = AutogradLogisticRegression(alpha=params["alpha"],
+    clf = AutogradRidgeRegression(alpha=params["alpha"],
                           beta=0.,
                           fit_intercept=True,
                           opti_lr=params["opti_lr"],
@@ -143,7 +143,7 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG,
                             format="%(asctime)s.%(msecs)d %(levelname)s %(module)s - %(funcName)s: %(message)s")
 
-    bootstrap_file = None  #"predictions/autograd.pooled.logistic.269.spearmint"
+    bootstrap_file = None  #"predictions/autograd.pooled.krr.269.spearmint"
     training_data_file = "../data/270.pkl"
     testing_data_file = "../data/269.pkl"
     phylo_tree_file = "../data/phylogenetic_tree.json"
@@ -151,7 +151,7 @@ if __name__ == "__main__":
     random_state = np.random.RandomState(42)
     n_parameter_combinations = 148
     n_random_combinations = 10
-    output_path = os.path.join("predictions", "autograd.pooled.logistic.{0!s}".format(os.path.basename(testing_data_file).replace(".pkl", "")))
+    output_path = os.path.join("predictions", "autograd.pooled.krr.{0!s}".format(os.path.basename(testing_data_file).replace(".pkl", "")))
 
     parameter_space = {'alpha': {'type': 'float', 'min': 1e-8, 'max': 1e4},
                        'opti_lr': {'type': 'float', 'min': 1e-5, 'max': 1e-1},
