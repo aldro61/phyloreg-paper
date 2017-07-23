@@ -5,7 +5,7 @@
 ### July 22 2017
 
 * New results for the autograd implementations show that phylogenetic regularization does help achieve better testing set AUCs (train on file #270, test on file #269):
-  * RR: (running)
+  * RR:  0.766
   * Logistic: 0.759
   * PhyloRR: 0.802
   * PhyloLogistic: 0.807
