@@ -2,6 +2,11 @@
 
 ## Status updates
 
+### July 24 2017
+
+* Experiments for pooled orthologs are running
+* Added a sanity check for the data: verify that no training set orthologous sequences are found in the testing set.
+
 ### July 22 2017
 
 * New results for the autograd implementations show that phylogenetic regularization does help achieve better testing set AUCs (train on file #270, test on file #269):
