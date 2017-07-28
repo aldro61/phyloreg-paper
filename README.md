@@ -14,6 +14,7 @@
 * I also tried to use phylogenetic regularization on a tree where the position of the species in the graph is randomly swapped. It is interesting that it did not really work:
   * PhyloRandomLogistic: 0.772
   * I don't know how to interpret this yet, but it definitely means that the tree structure caries relevant information, since breaking it leads to worst results.
+* **Important:** I notice that for the pooled ortholog algorithms, the best HP combinations never reach 100% train AUC. This means that some examples are systematically misclassified by the algorithm. This suggests that L2 regularization is able to remove the noise from the orthologs that do not truly have the same label as the labelled example. I'm sure that if we redid ortholog pooling, the predictor would be much less accurate due to noise.
 
 ### July 24 2017
 
