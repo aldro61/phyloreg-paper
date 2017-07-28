@@ -2,6 +2,19 @@
 
 ## Status updates
 
+### July 28 2017
+
+* New results show that although phyloreg is better than vanilla algorithms, ortholog pooling does better (train on file #270, test on file #269, see July 22 2017 for full protocol):
+  * RR:  0.766
+  * Logistic: 0.759
+  * PhyloRR: 0.802
+  * PhyloLogistic: 0.807
+  * PooledRR: 0.835
+  * PooledLogistic: 0.841
+* I also tried to use phylogenetic regularization on a tree where the position of the species in the graph is randomly swapped. It is interesting that it did not really work:
+  * PhyloRandomLogistic: 0.772
+  * I don't know how to interpret this yet, but it definitely means that the tree structure caries relevant information, since breaking it leads to worst results.
+
 ### July 24 2017
 
 * Experiments for pooled orthologs are running
