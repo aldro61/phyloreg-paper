@@ -1,7 +1,8 @@
 """
-Predictions for a ridge regression that does not use phylogenetic regularization,
-but uses the orthologs as regular learning examples with the label of the corresponding
-labelled sequence.
+Predictions for a logistic regression that uses phylogenetic regularization
+and a unit star graph that encourages the model to predict the labelled example's
+label for the orthologous sequences. This is a sort of hybrid between phyloreg
+and ortholog pooling.
 
 Spearmint is used to select the model hyperparameters.
 
@@ -11,7 +12,7 @@ import json
 import numpy as np
 import os
 
-from phyloreg.autograd_classifiers import AutogradRidgeRegression
+from phyloreg.autograd_classifiers import AutogradLogisticRegression
 from collections import defaultdict
 from phyloreg.species import ExponentialAdjacencyMatrixBuilder
 from simple_spearmint import SimpleSpearmint
@@ -22,10 +23,9 @@ from time import time
 def cross_validation(phylo_tree, train_data, folds, params):
     sgd_shuffler = np.random.RandomState(42)
 
-    # Create the species adjacency matrix (and disable it)
+    # Create the species adjacency matrix
     species, adjacency = \
-        ExponentialAdjacencyMatrixBuilder(sigma=1e-100)(phylo_tree)
-    adjacency = np.eye(adjacency.shape[0])  # Only self connections
+        ExponentialAdjacencyMatrixBuilder(sigma=params["sigma"])(phylo_tree)
 
     example_ids = np.array(train_data["labels"].keys(), dtype=np.uint)
     fold_aucs = []
@@ -39,35 +39,30 @@ def cross_validation(phylo_tree, train_data, folds, params):
         X_train = np.vstack((train_data["labelled_examples"][i] for i in train_ids))
         y_train = np.array([train_data["labels"][i] for i in train_ids], dtype=np.uint8)
 
-        # Add the orthologous examples
-        new_x_train = []
-        new_y_train = []
-        for i, id in enumerate(train_ids):
-            if train_data["ortho_info"].has_key(id):
-                ortho_x = train_data["ortho_info"][id]["X"]
-                new_x_train.append(ortho_x)
-                new_y_train.append(np.ones(ortho_x.shape[0]) * y_train[i])  # Use the current example's label
-        X_train = np.vstack([X_train] + new_x_train)
-        y_train = np.hstack([y_train] + new_y_train)
-        assert y_train.shape[0] == X_train.shape[0]
-
-        # Build the orthologs dictionnary (empty because we won't use them)
+        # Build the orthologs dictionnary
         orthologs = defaultdict(lambda: {"X": [], "species": []})
+        for i, id in enumerate(train_ids):
+            # The ortholog dictionnary key must be the index of the example in the
+            # feature matrix. The orthologs need to be in the same order as the
+            # feature vectors and labels.
+            if train_data["ortho_info"].has_key(id):
+                orthologs[i] = train_data["ortho_info"][id]
 
         # Prepare the testing data
         X_test = np.vstack((train_data["labelled_examples"][i] for i in test_ids))
         y_test = np.array([train_data["labels"][i] for i in test_ids], dtype=np.uint8)
 
         # Fit the classifier
-        clf = AutogradRidgeRegression(alpha=params["alpha"],
-                              beta=0.,
+        clf = AutogradLogisticRegression(alpha=params["alpha"],
+                              beta=params["beta"],
+                              gamma=params["gamma"],
                               fit_intercept=True,
                               opti_lr=params["opti_lr"],
                               opti_tol=1e-5,
                               opti_max_epochs=300,
-                              opti_patience=5,
+                              opti_patience=10,
                               opti_batch_size=20,
-                              opti_clip_norm=params["opti_clip_norm"])
+                              opti_clip_norm=0.)
         clf.fit(X=X_train,
                 X_species=["hg38"] * X_train.shape[0],
                 y=y_train,
@@ -85,10 +80,9 @@ def cross_validation(phylo_tree, train_data, folds, params):
 def train_test_with_fixed_params(train_data, test_data, phylo_tree, params):
     sgd_shuffler = np.random.RandomState(42)
 
-    # Create the species adjacency matrix (and disable it)
+    # Create the species adjacency matrix
     species, adjacency = \
-        ExponentialAdjacencyMatrixBuilder(sigma=1e-100)(phylo_tree)
-    adjacency = np.eye(adjacency.shape[0])  # Only self connections
+        ExponentialAdjacencyMatrixBuilder(sigma=params["sigma"])(phylo_tree)
 
     # Prepare the training data
     train_ids = np.array(train_data["labels"].keys())  # Use the entire training set
@@ -96,20 +90,14 @@ def train_test_with_fixed_params(train_data, test_data, phylo_tree, params):
     X_train = np.vstack((train_data["labelled_examples"][i] for i in train_ids))
     y_train = np.array([train_data["labels"][i] for i in train_ids], dtype=np.uint8)
 
-    # Add the orthologous examples
-    new_x_train = []
-    new_y_train = []
-    for i, id in enumerate(train_ids):
-        if train_data["ortho_info"].has_key(id):
-            ortho_x = train_data["ortho_info"][id]["X"]
-            new_x_train.append(ortho_x)
-            new_y_train.append(np.ones(ortho_x.shape[0]) * y_train[i])  # Use the current example's label
-    X_train = np.vstack([X_train] + new_x_train)
-    y_train = np.hstack([y_train] + new_y_train)
-    assert y_train.shape[0] == X_train.shape[0]
-
-    # Build the orthologs dictionnary (empty because we won't use them)
+    # Build the orthologs dictionnary
     orthologs = defaultdict(lambda: {"X": [], "species": []})
+    for i, id in enumerate(train_ids):
+        # The ortholog dictionnary key must be the index of the example in the
+        # feature matrix. The orthologs need to be in the same order as the
+        # feature vectors and labels.
+        if train_data["ortho_info"].has_key(id):
+            orthologs[i] = train_data["ortho_info"][id]
 
     # Prepare the testing data
     test_ids = test_data["labels"].keys()  # Use the entire testing set
@@ -117,15 +105,16 @@ def train_test_with_fixed_params(train_data, test_data, phylo_tree, params):
     y_test = np.array([test_data["labels"][i] for i in test_ids], dtype=np.uint8)
 
     # Fit the classifier
-    clf = AutogradRidgeRegression(alpha=params["alpha"],
-                          beta=0.,
+    clf = AutogradLogisticRegression(alpha=params["alpha"],
+                          beta=params["beta"],
+                          gamma=params["gamma"],
                           fit_intercept=True,
                           opti_lr=params["opti_lr"],
                           opti_tol=1e-5,
                           opti_max_epochs=300,
-                          opti_patience=5,
+                          opti_patience=10,
                           opti_batch_size=20,
-                          opti_clip_norm=params["opti_clip_norm"])
+                          opti_clip_norm=0.)
     clf.fit(X=X_train,
             X_species=["hg38"] * X_train.shape[0],
             y=y_train,
@@ -143,7 +132,7 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG,
                             format="%(asctime)s.%(msecs)d %(levelname)s %(module)s - %(funcName)s: %(message)s")
 
-    bootstrap_file = "predictions/autograd.pooled.krr.269.spearmint"
+    bootstrap_file = None  #"predictions/autograd.phylo.unitstar.logistic.269.spearmint"
     training_data_file = "../data/270.pkl"
     testing_data_file = "../data/269.pkl"
     phylo_tree_file = "../data/phylogenetic_tree.json"
@@ -151,11 +140,15 @@ if __name__ == "__main__":
     random_state = np.random.RandomState(42)
     n_parameter_combinations = 100
     n_random_combinations = 10
-    output_path = os.path.join("predictions", "autograd.pooled.krr.{0!s}".format(os.path.basename(testing_data_file).replace(".pkl", "")))
+    output_path = os.path.join("predictions", "autograd.phylo.unitstar.logistic.{0!s}".format(os.path.basename(testing_data_file).replace(".pkl", "")))
 
-    parameter_space = {'alpha': {'type': 'float', 'min': 1e-8, 'max': 1e4},
-                       'opti_lr': {'type': 'float', 'min': 1e-5, 'max': 1e-1},
-                       'opti_clip_norm': {'type': 'float', 'min': 1e0, 'max': 1e3}}
+    parameter_space = {'sigma': {'type': 'float', 'min': 1e-5, 'max': 1e-3},
+                       'alpha': {'type': 'float', 'min': 1e4, 'max': 1e3},
+                       'beta': {'type': 'float', 'min': 1e-8, 'max': 1e3},
+                       'gamma': {'type': 'float', 'min': 1e-8, 'max': 1e3},
+                       'opti_lr': {'type': 'float', 'min': 1e-5, 'max': 1e-2},
+                    #    'opti_clip_norm': {'type': 'float', 'min': 0.999999999999, 'max': 1.}
+                       }
 
     # Load the training data
     train_data = c.load(open(training_data_file, "r"))
@@ -210,6 +203,7 @@ if __name__ == "__main__":
                 best_model_cv_score = cv_score
                 best_params = params
                 print "Found a better model!\n\n"
+                # TODO: Some tiebreaker that includes gamma
 
         # Feed the result back to Spearmint
         ss.update(params, cv_score)

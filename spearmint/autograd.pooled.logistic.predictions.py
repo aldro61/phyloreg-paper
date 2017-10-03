@@ -143,13 +143,13 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG,
                             format="%(asctime)s.%(msecs)d %(levelname)s %(module)s - %(funcName)s: %(message)s")
 
-    bootstrap_file = None  #"predictions/autograd.pooled.logistic.269.spearmint"
+    bootstrap_file = "predictions/autograd.pooled.logistic.269.spearmint"
     training_data_file = "../data/270.pkl"
     testing_data_file = "../data/269.pkl"
     phylo_tree_file = "../data/phylogenetic_tree.json"
     n_cv_folds = 3
     random_state = np.random.RandomState(42)
-    n_parameter_combinations = 148
+    n_parameter_combinations = 93
     n_random_combinations = 10
     output_path = os.path.join("predictions", "autograd.pooled.logistic.{0!s}".format(os.path.basename(testing_data_file).replace(".pkl", "")))
 

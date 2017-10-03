@@ -1,7 +1,8 @@
 """
-Predictions for a ridge regression that does not use phylogenetic regularization,
-but uses the orthologs as regular learning examples with the label of the corresponding
-labelled sequence.
+Predictions for a logistic regression that uses a probabilistic estimate of the
+ortholog labels. This is the idea proposed by Mathieu Blanchette on August 4,
+2017. It differs from manifold-based phylogenetic regularization and is slightly
+more general than ortholog pooling.
 
 Spearmint is used to select the model hyperparameters.
 
@@ -11,21 +12,60 @@ import json
 import numpy as np
 import os
 
-from phyloreg.autograd_classifiers import AutogradRidgeRegression
+from phyloreg.autograd_classifiers import AutogradLogisticRegressionProbabilisticOrthologs
 from collections import defaultdict
-from phyloreg.species import ExponentialAdjacencyMatrixBuilder
+from phyloreg.species import BaseAdjacencyMatrixBuilder
 from simple_spearmint import SimpleSpearmint
 from sklearn.metrics import roc_auc_score
 from time import time
 
 
+GRADIENT_CLIP_NORM = 10.
+OPTI_PATIENCE = 10
+
+
+class MathieuAdjacencyMatrixBuilder(BaseAdjacencyMatrixBuilder):
+    """
+    This simulates an adjacency matrix, but in practice, the only information
+    we get is the distance between the human species and the other species. I
+    did this to experiment more quickly, so we'll need to make this nicer later.
+
+    """
+    def __init__(self, rate_of_change=0.):
+        self.rate_of_change = rate_of_change
+        super(MathieuAdjacencyMatrixBuilder, self).__init__()
+
+    def _build_adjacency(self, tree):
+        """
+        Tree is not a real tree, it is a dictionnary giving the distance of all
+        species and human.
+
+        This function uses the Jukes-Cantor evolutionnary model to estimate
+        the probability of the label changing between two species based on their
+        evolutionnary distance.
+
+        The returned matrix only has relevant information in its first row. The
+        rest will be set to -inf.
+
+        """
+        A = np.ones((len(tree), len(tree))) * -np.infty
+        distances = np.array(tree.values())
+
+        # Calculate the probability that the label has not changed.
+        # The probability that the label has changed is just 1 - p_no_change,
+        # so it would be redundant to calculate it.
+        p_no_change = 0.5 + 0.5 * np.exp(-2. * self.rate_of_change * distances)
+        A[0] = p_no_change
+
+        return tree.keys(), A
+
+
 def cross_validation(phylo_tree, train_data, folds, params):
     sgd_shuffler = np.random.RandomState(42)
 
-    # Create the species adjacency matrix (and disable it)
+    # Create the matrix where only the first row is relevant
     species, adjacency = \
-        ExponentialAdjacencyMatrixBuilder(sigma=1e-100)(phylo_tree)
-    adjacency = np.eye(adjacency.shape[0])  # Only self connections
+        MathieuAdjacencyMatrixBuilder(rate_of_change=params["rate_of_change"])(phylo_tree)
 
     example_ids = np.array(train_data["labels"].keys(), dtype=np.uint)
     fold_aucs = []
@@ -39,35 +79,30 @@ def cross_validation(phylo_tree, train_data, folds, params):
         X_train = np.vstack((train_data["labelled_examples"][i] for i in train_ids))
         y_train = np.array([train_data["labels"][i] for i in train_ids], dtype=np.uint8)
 
-        # Add the orthologous examples
-        new_x_train = []
-        new_y_train = []
-        for i, id in enumerate(train_ids):
-            if train_data["ortho_info"].has_key(id):
-                ortho_x = train_data["ortho_info"][id]["X"]
-                new_x_train.append(ortho_x)
-                new_y_train.append(np.ones(ortho_x.shape[0]) * y_train[i])  # Use the current example's label
-        X_train = np.vstack([X_train] + new_x_train)
-        y_train = np.hstack([y_train] + new_y_train)
-        assert y_train.shape[0] == X_train.shape[0]
-
-        # Build the orthologs dictionnary (empty because we won't use them)
+        # Build the orthologs dictionnary
         orthologs = defaultdict(lambda: {"X": [], "species": []})
+        for i, id in enumerate(train_ids):
+            # The ortholog dictionnary key must be the index of the example in the
+            # feature matrix. The orthologs need to be in the same order as the
+            # feature vectors and labels.
+            if train_data["ortho_info"].has_key(id):
+                orthologs[i] = train_data["ortho_info"][id]
 
         # Prepare the testing data
         X_test = np.vstack((train_data["labelled_examples"][i] for i in test_ids))
         y_test = np.array([train_data["labels"][i] for i in test_ids], dtype=np.uint8)
 
         # Fit the classifier
-        clf = AutogradRidgeRegression(alpha=params["alpha"],
-                              beta=0.,
+        clf = AutogradLogisticRegressionProbabilisticOrthologs(
+                              alpha=params["alpha"],
+                              beta=params["beta"],
                               fit_intercept=True,
                               opti_lr=params["opti_lr"],
                               opti_tol=1e-5,
                               opti_max_epochs=300,
-                              opti_patience=5,
+                              opti_patience=OPTI_PATIENCE,
                               opti_batch_size=20,
-                              opti_clip_norm=params["opti_clip_norm"])
+                              opti_clip_norm=GRADIENT_CLIP_NORM)
         clf.fit(X=X_train,
                 X_species=["hg38"] * X_train.shape[0],
                 y=y_train,
@@ -85,10 +120,9 @@ def cross_validation(phylo_tree, train_data, folds, params):
 def train_test_with_fixed_params(train_data, test_data, phylo_tree, params):
     sgd_shuffler = np.random.RandomState(42)
 
-    # Create the species adjacency matrix (and disable it)
+    # Create the matrix where only the first row is relevant
     species, adjacency = \
-        ExponentialAdjacencyMatrixBuilder(sigma=1e-100)(phylo_tree)
-    adjacency = np.eye(adjacency.shape[0])  # Only self connections
+        MathieuAdjacencyMatrixBuilder(rate_of_change=params["rate_of_change"])(phylo_tree)
 
     # Prepare the training data
     train_ids = np.array(train_data["labels"].keys())  # Use the entire training set
@@ -96,20 +130,14 @@ def train_test_with_fixed_params(train_data, test_data, phylo_tree, params):
     X_train = np.vstack((train_data["labelled_examples"][i] for i in train_ids))
     y_train = np.array([train_data["labels"][i] for i in train_ids], dtype=np.uint8)
 
-    # Add the orthologous examples
-    new_x_train = []
-    new_y_train = []
-    for i, id in enumerate(train_ids):
-        if train_data["ortho_info"].has_key(id):
-            ortho_x = train_data["ortho_info"][id]["X"]
-            new_x_train.append(ortho_x)
-            new_y_train.append(np.ones(ortho_x.shape[0]) * y_train[i])  # Use the current example's label
-    X_train = np.vstack([X_train] + new_x_train)
-    y_train = np.hstack([y_train] + new_y_train)
-    assert y_train.shape[0] == X_train.shape[0]
-
-    # Build the orthologs dictionnary (empty because we won't use them)
+    # Build the orthologs dictionnary
     orthologs = defaultdict(lambda: {"X": [], "species": []})
+    for i, id in enumerate(train_ids):
+        # The ortholog dictionnary key must be the index of the example in the
+        # feature matrix. The orthologs need to be in the same order as the
+        # feature vectors and labels.
+        if train_data["ortho_info"].has_key(id):
+            orthologs[i] = train_data["ortho_info"][id]
 
     # Prepare the testing data
     test_ids = test_data["labels"].keys()  # Use the entire testing set
@@ -117,15 +145,16 @@ def train_test_with_fixed_params(train_data, test_data, phylo_tree, params):
     y_test = np.array([test_data["labels"][i] for i in test_ids], dtype=np.uint8)
 
     # Fit the classifier
-    clf = AutogradRidgeRegression(alpha=params["alpha"],
-                          beta=0.,
+    clf = AutogradLogisticRegressionProbabilisticOrthologs(
+                          alpha=params["alpha"],
+                          beta=params["beta"],
                           fit_intercept=True,
                           opti_lr=params["opti_lr"],
                           opti_tol=1e-5,
                           opti_max_epochs=300,
-                          opti_patience=5,
+                          opti_patience=OPTI_PATIENCE,
                           opti_batch_size=20,
-                          opti_clip_norm=params["opti_clip_norm"])
+                          opti_clip_norm=GRADIENT_CLIP_NORM)
     clf.fit(X=X_train,
             X_species=["hg38"] * X_train.shape[0],
             y=y_train,
@@ -143,19 +172,20 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG,
                             format="%(asctime)s.%(msecs)d %(levelname)s %(module)s - %(funcName)s: %(message)s")
 
-    bootstrap_file = "predictions/autograd.pooled.krr.269.spearmint"
+    bootstrap_file = "./predictions/autograd.phylo.probalabels.logistic.269.spearmint"
     training_data_file = "../data/270.pkl"
     testing_data_file = "../data/269.pkl"
-    phylo_tree_file = "../data/phylogenetic_tree.json"
+    phylo_tree_file = "../data/distance_to_human.json"
     n_cv_folds = 3
     random_state = np.random.RandomState(42)
-    n_parameter_combinations = 100
+    n_parameter_combinations = 310
     n_random_combinations = 10
-    output_path = os.path.join("predictions", "autograd.pooled.krr.{0!s}".format(os.path.basename(testing_data_file).replace(".pkl", "")))
+    output_path = os.path.join("predictions", "autograd.phylo.probalabels.logistic.{0!s}".format(os.path.basename(testing_data_file).replace(".pkl", "")))
 
-    parameter_space = {'alpha': {'type': 'float', 'min': 1e-8, 'max': 1e4},
-                       'opti_lr': {'type': 'float', 'min': 1e-5, 'max': 1e-1},
-                       'opti_clip_norm': {'type': 'float', 'min': 1e0, 'max': 1e3}}
+    parameter_space = {'rate_of_change': {'type': 'float', 'min': 0., 'max': 1.},
+                       'alpha': {'type': 'float', 'min': 0., 'max': 1e4},
+                       'beta': {'type': 'float', 'min': 0., 'max': 1e1},
+                       'opti_lr': {'type': 'float', 'min': 1e-5, 'max': 1e-1}}
 
     # Load the training data
     train_data = c.load(open(training_data_file, "r"))
